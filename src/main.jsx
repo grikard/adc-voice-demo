@@ -3,14 +3,21 @@ import {createRoot} from 'react-dom/client';
 import {connectMessaging} from './messaging.js';
 import {connectMeasurements, presenterMode} from './measurements.js';
 import {MeasurementStrip} from './MeasurementStrip.jsx';
+import {connectChecks} from './checks.js';
+import {YourChecks} from './YourChecks.jsx';
 import './styles.css';
 
 // Presentation mode is display-only, never authorization for privileged telemetry.
 // Attach listeners before the Salesforce bootstrap can emit lifecycle events.
-const personaKey = 'HELEN';
+const personaKey = 'UNBOUND';
+const checks = connectChecks(window);
 const measurements = presenterMode(window.location.search) ? connectMeasurements(personaKey) : null;
 
 function App(){
+ const [context,setContext]=useState(checks.snapshot());
+ useEffect(()=>checks.subscribe(()=>{const next=checks.snapshot();if(next.card)measurements?.bindPersona(next.card.personaKey,next.card.conversationId);setContext(next);}),[]);
+ const displayName={HELEN:'Helen',DANIEL:'Daniel',INGRID:'Ingrid'}[context.card?.personaKey];
+ const currentPersona=context.card?.personaKey||'UNBOUND';
  const [ready,setReady]=useState(false);
  const [launching,setLaunching]=useState(false);
  const launchingRef=useRef(false);
@@ -52,15 +59,15 @@ function App(){
   <div className="brand"><img className="libre-logo" src="assets/libre.png" alt="FreeStyle Libre"/><span className="brand-divider"></span><img className="abbott-logo" src="assets/abbott.png" alt="Abbott"/></div>
   <button onClick={() => setLarge(!large)} id="textSize" className="text-size" type="button" aria-pressed={large}><span aria-hidden="true">Aa</span> Larger text</button>
  </header>
- {measurements && <MeasurementStrip controller={measurements} personaKey={personaKey}/>}
+ {measurements && <MeasurementStrip controller={measurements} personaKey={currentPersona}/>}
  <main id="main">
   <section className="welcome" aria-labelledby="welcomeTitle">
    <div className="welcome-copy">
     <p className="eyebrow"><span></span> YOUR LIBRE SUPPORT</p>
-    <h1 id="welcomeTitle">Good to see you, <br/><span>Helen.</span></h1>
+    <h1 id="welcomeTitle">{displayName ? `Hello ${displayName}.` : 'Your Libre support.'}</h1>
     <p className="intro">A little help. <br/>A lot less repeating yourself.</p>
     <p className="description">Talk with Alex, your Libre AI support assistant, about your connection, recent checks or a replacement.</p>
-    <div className="profile-note"><span className="profile-icon" aria-hidden="true">H</span><div><strong>Helen Parker</strong><span>Your support record</span></div></div>
+    {displayName && <div className="profile-note"><span className="profile-icon" aria-hidden="true">{displayName[0]}</span><div><strong>{displayName}</strong><span>Support context connected</span></div></div>}
    </div>
    <div className="conversation-card">
     <div className="voice-art" aria-hidden="true"><div className="voice-ring"><div className="voice-disc"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><span className="voice-caption">SUPPORT THAT LISTENS</span></div>
@@ -71,6 +78,7 @@ function App(){
     <p id="status" className={error ? "status error" : "status"} role="status" aria-live="polite">{status}</p>
    </div>
   </section>
+  <YourChecks controller={checks} disabled={!ready || launching} onReview={()=>launch("text", "What do my current checks show, and what should I do next?")}/>
   <section className="help-section" aria-labelledby="helpTitle">
    <div className="section-heading"><h2 id="helpTitle">Where would you like to start?</h2><p>You can ask in your own words.</p></div>
    <div className="help-grid">

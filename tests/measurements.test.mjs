@@ -13,11 +13,22 @@ test('launch duration includes connection wait, freezes at end and never merges 
  p.controller.setPersona('INGRID');p.start('launch-three');
  assert.equal(p.controller.snapshot().current.totalElapsedMs,null);
 });
-function harness() {
+test('first session binding retains launch timing; a different persona cannot inherit it',()=>{
+ const p=harness('UNBOUND');p.controller.markLaunch();p.advance(5000);p.start('bound-one');p.advance(2000);
+ p.controller.bindPersona('HELEN','another-conversation');
+ p.controller.bindPersona('HELEN','bound-one');
+ assert.equal(p.controller.snapshot().current.totalElapsedMs,7000);
+ p.controller.setPersona('HELEN');
+ assert.equal(p.controller.snapshot().current.totalElapsedMs,7000);
+ p.controller.bindPersona('DANIEL','bound-one');
+ assert.equal(p.controller.snapshot().current,null);
+ assert.equal(p.controller.snapshot().finalSummary.personaKey,'HELEN');
+});
+function harness(persona='HELEN') {
  const win = new EventTarget(), storage = new Map();
  win.sessionStorage = {getItem: k => storage.get(k), setItem: (k, v) => storage.set(k, v)};
  let time = Date.UTC(2026, 8, 20);
- const controller = createMeasurements(win, 'HELEN', () => time);
+ const controller = createMeasurements(win, persona, () => time);
  const emit = (name, detail) => win.dispatchEvent(new CustomEvent(name, {detail}));
  return {win, controller, storage, emit, advance: ms => time += ms, now: () => time,
   start: id => emit('onEmbeddedMessagingConversationStarted', {conversationId: id}),

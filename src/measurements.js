@@ -108,6 +108,13 @@ export function createMeasurements(win, personaKey, now = () => Date.now()) {
  return {
   subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
   markLaunch() { if((!current||current.ended)&&pendingLaunchAt==null)pendingLaunchAt=now(); },
+  bindPersona(next, conversationId) {
+   // Labelling the first server-bound session must retain its launch timestamp.
+   // Later persona changes still retire the previous measurement record.
+   if (!['HELEN','DANIEL','INGRID'].includes(next) || !current || current.conversationId !== conversationId) return;
+   if (personaKey === 'UNBOUND' && !current.ended) { personaKey=next; publish(); }
+   else this.setPersona(next);
+  },
   snapshot() { return {current: current && {...current, durationMs: elapsed(),totalElapsedMs:current.launchAt==null?null:current.ended?finalSummary?.totalElapsedMs:Math.max(0,now()-current.launchAt)}, finalSummary}; },
   setPersona(next) {
    if (next === personaKey) return;
