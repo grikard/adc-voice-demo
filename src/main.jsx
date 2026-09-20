@@ -1,104 +1,75 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {connectMessaging} from './messaging.js';
-import {connectMeasurements, presenterMode} from './measurements.js';
+import {connectMeasurements,presenterMode} from './measurements.js';
 import {MeasurementStrip} from './MeasurementStrip.jsx';
 import {connectChecks} from './checks.js';
 import {YourChecks} from './YourChecks.jsx';
+import {personas,readRoute,personaHref,prepareExperience,personaStorageKey} from './personas.js';
+import {clearCustomerSession} from './sessionReset.js';
 import './styles.css';
 
-// Presentation mode is display-only, never authorization for privileged telemetry.
-// Attach listeners before the Salesforce bootstrap can emit lifecycle events.
-const personaKey = 'UNBOUND';
-const checks = connectChecks(window);
-const measurements = presenterMode(window.location.search) ? connectMeasurements(personaKey) : null;
+const route=readRoute(window.location.search);
+const de=route.persona?.language==='de';
+document.documentElement.lang=de?'de':'en';
+document.title=route.persona?`${route.persona.name} · Libre Support`:'Libre Support · Choose an experience';
+const presenter=presenterMode(window.location.search);
+let checks={snapshot:()=>({card:null,ended:false}),subscribe:()=>()=>{},dispose:()=>{}};
+let measurements=null;
+const target=route.kind==='customer'?route.id:'landing';
+const preparation=prepareExperience(window,target,()=>clearCustomerSession()).catch(()=>({error:true}));
 
-function App(){
- const [context,setContext]=useState(checks.snapshot());
- useEffect(()=>checks.subscribe(()=>{const next=checks.snapshot();if(next.card)measurements?.bindPersona(next.card.personaKey,next.card.conversationId);setContext(next);}),[]);
- const displayName={HELEN:'Helen',DANIEL:'Daniel',INGRID:'Ingrid'}[context.card?.personaKey];
- const currentPersona=context.card?.personaKey||'UNBOUND';
- const [ready,setReady]=useState(false);
- const [launching,setLaunching]=useState(false);
- const launchingRef=useRef(false);
+function BrandHeader(){
  const [large,setLarge]=useState(false);
- const [status,setStatus]=useState('Connecting to support…');
- const [error,setError]=useState(false);
- useEffect(()=>{
-  const connection=connectMessaging();
-  const sync=()=>{
-   const current=connection.getStatus();
-   setReady(current==='ready');setError(current==='error');
-   setStatus(current==='ready' ? 'Choose voice or typing in the conversation.' : current==='error'
-    ? 'We could not connect to support. Check your connection, then reload this page to try again.'
-    : 'Connecting to support…');
-  };
-  const unsubscribe=connection.subscribe(sync);
-  sync();
-  return unsubscribe;
- },[]);
  useEffect(()=>{document.body.classList.toggle('large-text',large);},[large]);
- async function launch(mode,question){
-  if(launchingRef.current)return;
-  measurements?.markLaunch();
-  if(!ready || !window.embeddedservice_bootstrap?.utilAPI?.launchChat){
-   setError(true);setStatus('The conversation is unavailable right now. Please try again later.');return;
-  }
-  launchingRef.current=true;setLaunching(true);setError(false);setStatus('Opening your conversation…');
-  try{
-   // Opens the native conversation. This does not start audio or authenticate Helen.
-   await connectMessaging().launch(question);
-   setStatus(question ? `Your question was sent: "${question}" Choose the voice control to speak with your assistant.` : mode==='voice' ? 'Choose the voice control in the conversation, then allow microphone access when asked.' : 'You can type your question in the conversation.');
-  }catch{
-   setError(true);setStatus(question ? `We could not confirm that your question was sent. Check the conversation before trying again: "${question}"` : 'We could not open the conversation. Please try again later.');
-  }finally{launchingRef.current=false;setLaunching(false);}
- }
- return <>
-<a className="skip" href="#main">Skip to support</a>
- <header className="topbar">
-  <div className="brand"><img className="libre-logo" src="assets/libre.png" alt="FreeStyle Libre"/><span className="brand-divider"></span><img className="abbott-logo" src="assets/abbott.png" alt="Abbott"/></div>
-  <button onClick={() => setLarge(!large)} id="textSize" className="text-size" type="button" aria-pressed={large}><span aria-hidden="true">Aa</span> Larger text</button>
- </header>
- {measurements && <MeasurementStrip controller={measurements} personaKey={currentPersona}/>}
- <main id="main">
-  <section className="welcome" aria-labelledby="welcomeTitle">
-   <div className="welcome-copy">
-    <p className="eyebrow"><span></span> YOUR LIBRE SUPPORT</p>
-    <h1 id="welcomeTitle">{displayName ? `Hello ${displayName}.` : 'Your Libre support.'}</h1>
-    <p className="intro">A little help. <br/>A lot less repeating yourself.</p>
-    <p className="description">Talk with Alex, your Libre AI support assistant, about your connection, recent checks or a replacement.</p>
-    {displayName && <div className="profile-note"><span className="profile-icon" aria-hidden="true">{displayName[0]}</span><div><strong>{displayName}</strong><span>Support context connected</span></div></div>}
-   </div>
-   <div className="conversation-card">
-    <div className="voice-art" aria-hidden="true"><div className="voice-ring"><div className="voice-disc"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><span className="voice-caption">SUPPORT THAT LISTENS</span></div>
-    <h2>Let's talk it through.</h2>
-    <p>Use your voice, at your pace.<br/>One question at a time.</p>
-    <button onClick={() => launch("voice")} disabled={!ready || launching} id="startVoice" className="primary" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"></path></svg><span className="primary-label"><span>{launching ? 'Opening conversation…' : !ready && !error ? 'Connecting to support…' : 'Talk to Alex'}</span><small>Libre AI support</small></span><svg className="arrow" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"></path></svg></button>
-    <button onClick={() => launch("text")} disabled={!ready || launching} id="startText" className="secondary" type="button">I prefer to type <span aria-hidden="true">→</span></button>
-    <p id="status" className={error ? "status error" : "status"} role="status" aria-live="polite">{status}</p>
-   </div>
-  </section>
-  <YourChecks controller={checks} disabled={!ready || launching} onReview={()=>launch("text", "What do my current checks show, and what should I do next?")}/>
-  <section className="help-section" aria-labelledby="helpTitle">
-   <div className="section-heading"><h2 id="helpTitle">Where would you like to start?</h2><p>You can ask in your own words.</p></div>
-   <div className="help-grid">
-    <button className="help-card" type="button" disabled={!ready || launching} onClick={event => launch("voice", event.currentTarget.dataset.question)} data-question="Why isn't my Libre connecting?">
-     <span className="help-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 5 10 14V5L7 19M12 2v20"></path></svg></span>
-     <span><strong>My connection</strong><span>“Why isn't my Libre connecting?”</span></span><b aria-hidden="true">↗</b>
-    </button>
-    <button className="help-card" type="button" disabled={!ready || launching} onClick={event => launch("voice", event.currentTarget.dataset.question)} data-question="What have the checks found so far?">
-     <span className="help-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v17H5zM9 2h6v4H9zM8 12l2 2 5-5M8 18h8"></path></svg></span>
-     <span><strong>My recent checks</strong><span>“What have the checks found?”</span></span><b aria-hidden="true">↗</b>
-    </button>
-    <button className="help-card" type="button" disabled={!ready || launching} onClick={event => launch("voice", event.currentTarget.dataset.question)} data-question="Can you check my replacement request?">
-     <span className="help-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m3 7 9-4 9 4v11l-9 4-9-4zM3 7l9 4 9-4M12 11v11M8 5l9 4"></path></svg></span>
-     <span><strong>My replacement</strong><span>“What's happening with my request?”</span></span><b aria-hidden="true">↗</b>
-    </button>
-   </div>
-  </section>
-  <section className="reassurance"><span className="reassurance-mark" aria-hidden="true">✓</span><div><h2>Your story stays with your support.</h2><p>Your assistant can use recorded checks and concerns, so you can focus on what you need next.</p></div></section>
- </main>
- <footer><span>Abbott · FreeStyle Libre support experience</span><span>Alex · Libre AI support assistant</span></footer>
-</>;
+ return <header className="topbar"><div className="brand"><img className="libre-logo" src="assets/libre.png" alt="FreeStyle Libre"/><span className="brand-divider"/><img className="abbott-logo" src="assets/abbott.png" alt="Abbott"/></div><button className="text-size" aria-pressed={large} onClick={()=>setLarge(!large)}><span aria-hidden="true">Aa</span>{de?'Größere Schrift':'Larger text'}</button></header>;
 }
-createRoot(document.getElementById("root")).render(<App/>);
+function VoiceIcon(){return <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg>;}
+function Landing(){return <main id="main" className="launch-page">
+ <section className="launch-intro"><p className="eyebrow"><span/>PRESENTER LAUNCHPAD</p><h1>One assistant.<br/><span>Three support experiences.</span></h1><p>Meet Alex, your Libre AI support assistant. Choose a prepared experience to begin the rehearsal.</p></section>
+ <section className="persona-grid" aria-label="Choose a customer experience">{Object.entries(personas).map(([id,p],i)=><article className={`persona-card persona-${id}`} key={id}><div className="persona-card-top"><span className="persona-avatar" aria-hidden="true">{p.initials}</span><span className="persona-language">{p.language==='de'?'Deutsch · DE':'English · US'}</span></div><p className="persona-number">EXPERIENCE 0{i+1}</p><h2>{p.name}</h2><p className="persona-topic">{p.topic}</p><div className="persona-availability"><span aria-hidden="true"/>{p.availability}</div><a className="persona-link" href={personaHref(id,presenter)} lang={p.language}>{p.button}<span aria-hidden="true">↗</span></a></article>)}</section>
+ <aside className="launch-note"><strong>Prepared for rehearsal.</strong><p>These links select a demo experience, not an authenticated customer identity. Current checks come from connected support records. Device observations and fulfillment remain simulated.</p><p>Helen needs presenter setup for each new conversation. Daniel’s session connection and Ingrid’s German deployment are still pending. Scenario controls stay in the Salesforce presenter console.</p><small>Changing experiences clears the previous Salesforce browser session across its tabs and windows. Use one experience at a time.</small></aside>
+ </main>;}
+function Customer({persona:p,phase}){
+ const [context,setContext]=useState(checks.snapshot()),[ready,setReady]=useState(false),[opening,setOpening]=useState(false),[status,setStatus]=useState(''),[error,setError]=useState(false);
+ const busy=useRef(false);
+ useEffect(()=>{if(phase!=='ready')setContext({card:null,ended:false});return checks.subscribe(()=>setContext(checks.snapshot()));},[phase]);
+ useEffect(()=>{
+  if(phase!=='ready'||!p.enabled)return;
+  const connection=connectMessaging();
+  const sync=()=>{const s=connection.getStatus();setReady(s==='ready');setError(s==='error');setStatus(s==='error'?'Support could not connect. Reload this page to retry.':s==='ready'?'Choose voice or typing in the conversation.':'Connecting to support…');};
+  const off=connection.subscribe(sync);sync();return off;
+ },[phase,p]);
+ const enabled=phase==='ready'&&p.enabled&&ready&&!opening;
+ async function launch(mode,question){
+  if(!enabled||busy.current)return;
+  busy.current=true;setOpening(true);setError(false);measurements?.markLaunch();
+  try{await connectMessaging().launch(question);setStatus(mode==='voice'?'Choose the voice control in the conversation. Your browser may ask for microphone access.':'Type your question in the conversation.');}
+  catch{setError(true);setStatus('We could not confirm the conversation opened or the question was sent. Check the conversation before retrying.');}
+  finally{busy.current=false;setOpening(false);}
+ }
+ return <>{measurements&&<MeasurementStrip controller={measurements} personaKey={p.key}/>}<main id="main" className="customer-page">
+ <a className="back-link" href="./">← {de?'Zur Übersicht':'All experiences'}</a>
+ <section className="welcome" aria-labelledby="welcomeTitle"><div className="welcome-copy"><p className="eyebrow"><span/>{de?'IHRE LIBRE UNTERSTÜTZUNG':'YOUR LIBRE SUPPORT'}</p><h1 id="welcomeTitle">{de?'Hallo':'Hello'} {p.first}.</h1><p className="intro">{p.headline}</p><p className="description">{p.description}</p><div className="profile-note"><span className="profile-icon" aria-hidden="true">{p.initials}</span><div><strong>{p.name}</strong><span>{de?'Vorbereitete Demo-Erfahrung · keine Identitätsprüfung':'Prepared demo experience · not identity verification'}</span></div></div>
+ <div className="current-status"><span>{de?'AKTUELLER STATUS':'CURRENT STATUS'}</span><p>{context.card?.conclusion||(p.enabled?'Support context awaiting verification.':de?'Gespräch noch nicht verfügbar.':'Conversation not available yet.')}</p></div></div>
+ <div className="conversation-card"><div className="voice-art" aria-hidden="true"><div className="voice-ring"><div className="voice-disc">{[1,2,3,4,5,6,7].map(n=><i key={n}/>)}</div></div></div><h2>{de?'Sprechen wir darüber.':'Let’s talk it through.'}</h2><p>{de?'In Ihrem Tempo. Eine Frage nach der anderen.':'At your pace. One question at a time.'}</p><button className="primary" id="startVoice" disabled={!enabled} onClick={()=>launch('voice')}><VoiceIcon/><span className="primary-label"><span>{opening?'Opening…':de?'Mit Alex sprechen':'Talk to Alex'}</span><small>{de?'Libre KI-Unterstützung':'Libre AI support'}</small></span></button><button className="secondary" id="startText" disabled={!enabled} onClick={()=>launch('text')}>{de?'Ich möchte lieber schreiben':'I prefer to type'} →</button><p className="availability-note">{p.blocker}</p>{p.enabled&&<p role="status" className={error?'status error':'status'}>{status}</p>}</div></section>
+ <YourChecks controller={checks} language={p.language} disabled={!enabled} onReview={()=>launch('text','What do my current checks show, and what should I do next?')}/>
+ {presenter&&<aside className="launch-note"><strong>Presenter preparation</strong><p>{p.key==='HELEN'?'After opening a new conversation, bind that exact session to Helen’s existing Case and the deliberately selected scenario. Current rehearsal: E002 / S02 historical enrichment; CRM controls current status and every write.':p.key==='DANIEL'?'Daniel’s independent Case and cloud-gap run exist. Per-session provisioning and a Daniel-only live retrieval test must pass before enabling these conversation buttons.':'The separate de_DE agent failed compiler validation (HTTP 422). A compatible German voice, dedicated published channel and generated snippet are still required.'}</p><p>Keep scenario selection in Salesforce. Never use this URL as proof of identity.</p></aside>}
+ </main></>;
+}
+function App(){
+ const [phase,setPhase]=useState('preparing');
+ useEffect(()=>{
+  let live=true;
+  preparation.then(({reload,error})=>{if(!live)return;if(error){setPhase('error');return;}if(reload){window.location.reload();return;}if(route.persona){checks=connectChecks(window,route.persona.key);measurements=presenter?connectMeasurements(route.persona.key):null;}setPhase('ready');});
+  const changed=e=>{if(e.key===personaStorageKey&&e.newValue!==target){setPhase('changed');measurements?.setPersona('UNBOUND');checks.dispose();window.embeddedservice_bootstrap?.utilAPI?.removeAllComponents?.();}};
+  const restored=e=>{if(e.persisted)window.location.reload();};
+  window.addEventListener('storage',changed);window.addEventListener('pageshow',restored);
+  return()=>{live=false;window.removeEventListener('storage',changed);window.removeEventListener('pageshow',restored);};
+ },[]);
+ return <><a className="skip" href="#main">{de?'Zum Inhalt':'Skip to support'}</a><BrandHeader/>
+ {phase!=='ready'&&<div className="session-notice" role="status">{phase==='preparing'?(de?'Die Gesprächsumgebung wird vorbereitet…':'Preparing a separate conversation environment…'):phase==='changed'?(de?'Eine andere Erfahrung wurde geöffnet. Bitte laden Sie diese Seite neu.':'Another experience was opened. Reload this page before continuing.'):(de?'Die vorherige Sitzung konnte nicht sicher zurückgesetzt werden. Bitte schließen Sie den Chat und laden Sie diese Seite neu.':'We could not safely clear the previous session. End the chat using its menu, then reload this page. Conversation launch is blocked until reset succeeds.')}</div>}
+ {route.kind==='customer'?<Customer persona={route.persona} phase={phase}/>:route.kind==='unknown'?<main id="main"><h1>Experience not found.</h1><a href="./">Choose Helen, Daniel or Ingrid</a></main>:<Landing/>}
+ <footer><span>Abbott · FreeStyle Libre</span><span>Alex · {de?'Libre KI-Assistent':'Libre AI support assistant'}</span></footer></>;
+}
+createRoot(document.getElementById('root')).render(<App/>);

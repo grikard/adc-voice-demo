@@ -17,7 +17,7 @@ export function parseChecks(raw,conversationId){
  }
  return {conversationId,personaKey:raw.personaKey,retrievedAt:Date.parse(raw.retrievedAt),conclusion:raw.conclusion,nextAction:raw.nextAction,checks:rows,backgroundContinues:raw.backgroundContinues===true};
 }
-export function connectChecks(win){
+export function connectChecks(win,expectedPersona=null){
  let conversationId=null,card=null,ended=false;const retired=new Set(),listeners=new Set(),handlers=[];
  const publish=()=>{for(const f of listeners)f();};
  const on=(n,f)=>{win.addEventListener(n,f);handlers.push([n,f]);};
@@ -34,7 +34,7 @@ export function connectChecks(win){
  on('onEmbeddedMessagingConversationClosed',e=>{if(e.detail?.conversationId===conversationId){ended=true;publish();}});
  on('onADCYourChecks',e=>{
   if(ended)return;const next=parseChecks(e.detail,conversationId);
-  if(!next||card&&(next.personaKey!==card.personaKey||next.retrievedAt<=card.retrievedAt))return;
+  if(!next||(expectedPersona&&next.personaKey!==expectedPersona)||card&&(next.personaKey!==card.personaKey||next.retrievedAt<=card.retrievedAt))return;
   card=next;publish();
  });
  return {snapshot:()=>({card,ended}),subscribe:f=>{listeners.add(f);return()=>listeners.delete(f);},dispose:()=>handlers.forEach(([n,f])=>win.removeEventListener(n,f))};
