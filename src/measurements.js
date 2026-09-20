@@ -9,7 +9,9 @@ export function durationLabel(ms) {
  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
 const emptyTelemetry = () => ({successfulActions: null, failedActions: null, retryAttempts: null,
- checksBeforeContact: null, latestOutcome: null, timeToFirstOutcomeMs: null});
+ checksBeforeContact: null, latestOutcome: null, timeToFirstOutcomeMs: null,
+ successfulReads:null, committedWrites:null, replacementCreated:null, humanInvolvementRequired:null,
+ voiceConnectionMs:null, voiceDurationMs:null, endingReason:null});
 const validId = id => typeof id === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(id);
 // Salesforce's session schema uses epoch timestamps; accept seconds and milliseconds.
 function epoch(value) {
@@ -18,7 +20,7 @@ function epoch(value) {
  return ms >= Date.UTC(2020, 0, 1) && ms <= Date.UTC(2100, 0, 1) ? ms : null;
 }
 export function createMeasurements(win, personaKey, now = () => Date.now()) {
- let current = null, finalSummary = null;
+ let current = null, finalSummary = null, pendingLaunchAt = null;
  const listeners = new Set(), handlers = [], retiredConversations = new Set(), retiredSessions = new Set();
  // Only a whitelisted timing summary is restored. Business receipts are never trusted
  // from browser storage, URL parameters, custom DOM events, or manual presenter entry.
@@ -27,6 +29,9 @@ export function createMeasurements(win, personaKey, now = () => Date.now()) {
   if (saved?.version === 1 && ['Ended', 'Conversation closed', 'New session', 'Persona changed', 'Page left'].includes(saved.reason)
       && (saved.durationMs === null || (Number.isFinite(saved.durationMs) && saved.durationMs >= 0))) {
    finalSummary = {version: 1, reason: saved.reason, durationMs: saved.durationMs,
+    totalElapsedMs:Number.isFinite(saved.totalElapsedMs)&&saved.totalElapsedMs>=0?saved.totalElapsedMs:null,
+    conversationId:validId(saved.conversationId)?saved.conversationId:null,
+    sessionId:validId(saved.sessionId)?saved.sessionId:null,
     timingSource: 'Previously observed in this tab', ...emptyTelemetry()};
   }
  } catch {}
@@ -38,6 +43,8 @@ export function createMeasurements(win, personaKey, now = () => Date.now()) {
   current.end = current.start != null && end >= current.start ? end : null;
   current.ended = true;
   finalSummary = {version: 1, reason, durationMs: current.end == null ? null : elapsed(),
+   totalElapsedMs:current.launchAt==null?null:Math.max(0,now()-current.launchAt),
+   conversationId:current.conversationId,sessionId:current.sessionId,personaKey,
    timingSource: current.timingSource, ...emptyTelemetry()};
   try { win.sessionStorage.setItem(summaryKey, JSON.stringify(finalSummary)); } catch {}
  }
@@ -45,7 +52,8 @@ export function createMeasurements(win, personaKey, now = () => Date.now()) {
   if (current && !current.ended) finish('New session');
   if (current?.conversationId && current.conversationId !== conversationId) retiredConversations.add(current.conversationId);
   if (current?.sessionId) retiredSessions.add(current.sessionId);
-  current = {conversationId, sessionId, start, timingSource: source, ended: false, end: null, ...emptyTelemetry()};
+  current = {conversationId, sessionId, start, launchAt:pendingLaunchAt, timingSource: source, ended: false, end: null, ...emptyTelemetry()};
+  pendingLaunchAt=null;
  }
  function listen(name, handler) {
   win.addEventListener(name, handler); handlers.push([name, handler]);
@@ -95,16 +103,17 @@ export function createMeasurements(win, personaKey, now = () => Date.now()) {
  listen('pageshow', event => {
   // Back/forward cache restoration must not resume an interrupted clock using
   // a guessed session start. Wait for a supported session event again.
-  if (event.persisted) { current = null; publish(); }
+  if (event.persisted) { current = null; pendingLaunchAt=null; publish(); }
  });
  return {
   subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-  snapshot() { return {current: current && {...current, durationMs: elapsed()}, finalSummary}; },
+  markLaunch() { if((!current||current.ended)&&pendingLaunchAt==null)pendingLaunchAt=now(); },
+  snapshot() { return {current: current && {...current, durationMs: elapsed(),totalElapsedMs:current.launchAt==null?null:current.ended?finalSummary?.totalElapsedMs:Math.max(0,now()-current.launchAt)}, finalSummary}; },
   setPersona(next) {
    if (next === personaKey) return;
    finish('Persona changed');
    if (current) retiredConversations.add(current.conversationId);
-   current = null; personaKey = next; publish();
+   current = null; pendingLaunchAt=null; personaKey = next; publish();
   },
   dispose() { for (const [name, handler] of handlers) win.removeEventListener(name, handler); listeners.clear(); }
  };

@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createMeasurements, connectMeasurements, durationLabel, presenterMode} from '../src/measurements.js';
+test('launch duration includes connection wait, freezes at end and never merges a new session',()=>{
+ const p=harness();p.controller.markLaunch();p.advance(5000);p.start('launch-one');p.advance(10000);
+ assert.equal(p.controller.snapshot().current.totalElapsedMs,15000);
+ p.controller.markLaunch();p.emit('onEmbeddedMessagingConversationClosed',{conversationId:'launch-one'});p.advance(3000);
+ assert.equal(p.controller.snapshot().finalSummary.totalElapsedMs,15000);
+ assert.equal(p.controller.snapshot().finalSummary.conversationId,'launch-one');
+ assert.equal(p.controller.snapshot().finalSummary.successfulReads,null);
+ p.controller.markLaunch();p.advance(2000);p.start('launch-two');
+ assert.equal(p.controller.snapshot().current.totalElapsedMs,2000);
+ p.controller.setPersona('INGRID');p.start('launch-three');
+ assert.equal(p.controller.snapshot().current.totalElapsedMs,null);
+});
 function harness() {
  const win = new EventTarget(), storage = new Map();
  win.sessionStorage = {getItem: k => storage.get(k), setItem: (k, v) => storage.set(k, v)};

@@ -33,6 +33,7 @@ function App(){
  useEffect(()=>{document.body.classList.toggle('large-text',large);},[large]);
  async function launch(mode,question){
   if(launchingRef.current)return;
+  measurements?.markLaunch();
   if(!ready || !window.embeddedservice_bootstrap?.utilAPI?.launchChat){
    setError(true);setStatus('The conversation is unavailable right now. Please try again later.');return;
   }
