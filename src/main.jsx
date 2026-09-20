@@ -58,14 +58,14 @@ function App(){
     <p className="eyebrow"><span></span> YOUR LIBRE SUPPORT</p>
     <h1 id="welcomeTitle">Good to see you, <br/><span>Helen.</span></h1>
     <p className="intro">A little help. <br/>A lot less repeating yourself.</p>
-    <p className="description">Talk with your support assistant about your connection, recent checks or a replacement.</p>
+    <p className="description">Talk with Alex, your Libre AI support assistant, about your connection, recent checks or a replacement.</p>
     <div className="profile-note"><span className="profile-icon" aria-hidden="true">H</span><div><strong>Helen Parker</strong><span>Your support record</span></div></div>
    </div>
    <div className="conversation-card">
     <div className="voice-art" aria-hidden="true"><div className="voice-ring"><div className="voice-disc"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><span className="voice-caption">SUPPORT THAT LISTENS</span></div>
     <h2>Let's talk it through.</h2>
     <p>Use your voice, at your pace.<br/>One question at a time.</p>
-    <button onClick={() => launch("voice")} disabled={!ready || launching} id="startVoice" className="primary" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"></path></svg>{launching ? 'Opening conversation…' : !ready && !error ? 'Connecting to support…' : 'Start a conversation'}<svg className="arrow" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"></path></svg></button>
+    <button onClick={() => launch("voice")} disabled={!ready || launching} id="startVoice" className="primary" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"></path></svg><span className="primary-label"><span>{launching ? 'Opening conversation…' : !ready && !error ? 'Connecting to support…' : 'Talk to Alex'}</span><small>Libre AI support</small></span><svg className="arrow" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"></path></svg></button>
     <button onClick={() => launch("text")} disabled={!ready || launching} id="startText" className="secondary" type="button">I prefer to type <span aria-hidden="true">→</span></button>
     <p id="status" className={error ? "status error" : "status"} role="status" aria-live="polite">{status}</p>
    </div>
@@ -89,7 +89,7 @@ function App(){
   </section>
   <section className="reassurance"><span className="reassurance-mark" aria-hidden="true">✓</span><div><h2>Your story stays with your support.</h2><p>Your assistant can use recorded checks and concerns, so you can focus on what you need next.</p></div></section>
  </main>
- <footer><span>Abbott · FreeStyle Libre support experience</span><span>AI support assistant · Connection and replacement support</span></footer>
+ <footer><span>Abbott · FreeStyle Libre support experience</span><span>Alex · Libre AI support assistant</span></footer>
 </>;
 }
 createRoot(document.getElementById("root")).render(<App/>);
