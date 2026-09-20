@@ -1,7 +1,14 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {connectMessaging} from './messaging.js';
+import {connectMeasurements, presenterMode} from './measurements.js';
+import {MeasurementStrip} from './MeasurementStrip.jsx';
 import './styles.css';
+
+// Presentation mode is display-only, never authorization for privileged telemetry.
+// Attach listeners before the Salesforce bootstrap can emit lifecycle events.
+const personaKey = 'HELEN';
+const measurements = presenterMode(window.location.search) ? connectMeasurements(personaKey) : null;
 
 function App(){
  const [ready,setReady]=useState(false);
@@ -44,6 +51,7 @@ function App(){
   <div className="brand"><img className="libre-logo" src="assets/libre.png" alt="FreeStyle Libre"/><span className="brand-divider"></span><img className="abbott-logo" src="assets/abbott.png" alt="Abbott"/></div>
   <button onClick={() => setLarge(!large)} id="textSize" className="text-size" type="button" aria-pressed={large}><span aria-hidden="true">Aa</span> Larger text</button>
  </header>
+ {measurements && <MeasurementStrip controller={measurements} personaKey={personaKey}/>}
  <main id="main">
   <section className="welcome" aria-labelledby="welcomeTitle">
    <div className="welcome-copy">
