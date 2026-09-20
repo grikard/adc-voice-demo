@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-pages/
+.npm-cache/
+.sf/
+.sfdx/
+.env
+.env.*
+*.key
+*.pem
