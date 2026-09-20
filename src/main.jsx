@@ -39,10 +39,10 @@ function App(){
   launchingRef.current=true;setLaunching(true);setError(false);setStatus('Opening your conversation…');
   try{
    // Opens the native conversation. This does not start audio or authenticate Helen.
-   await window.embeddedservice_bootstrap.utilAPI.launchChat(true);
-   setStatus(question ? `When ready, ask: “${question}”` : mode==='voice' ? 'Choose the voice control in the conversation, then allow microphone access when asked.' : 'You can type your question in the conversation.');
+   await connectMessaging().launch(question);
+   setStatus(question ? `Your question was sent: "${question}" Choose the voice control to speak with your assistant.` : mode==='voice' ? 'Choose the voice control in the conversation, then allow microphone access when asked.' : 'You can type your question in the conversation.');
   }catch{
-   setError(true);setStatus('We could not open the conversation. Please try again later.');
+   setError(true);setStatus(question ? `We could not confirm that your question was sent. Check the conversation before trying again: "${question}"` : 'We could not open the conversation. Please try again later.');
   }finally{launchingRef.current=false;setLaunching(false);}
  }
  return <>

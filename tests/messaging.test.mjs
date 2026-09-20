@@ -85,3 +85,86 @@ test('missing readiness times out and late readiness recovers without reinitiali
  assert.equal(connection.getStatus(), 'ready');
  assert.equal(p.scripts.length, 1);
 });
+
+test('selected question waits for conversation load, then sends exactly once despite rapid clicks', async () => {
+ const p = page();
+ const connection = connectMessaging(p.win, p.doc);
+ p.buttonReady();
+ const sent = [];
+ p.win.embeddedservice_bootstrap.utilAPI.sendTextMessage = async text => sent.push(text);
+ const first = connection.launch('Can you check my replacement request?');
+ assert.equal(connection.launch('another question'), first);
+ await Promise.resolve();
+ assert.equal(sent.length, 0);
+ p.win.dispatchEvent(new Event('onEmbeddedMessagingConversationOpened'));
+ await first;
+ p.win.dispatchEvent(new Event('onEmbeddedMessagingFirstBotMessageSent'));
+ assert.deepEqual(sent, ['Can you check my replacement request?']);
+ assert.equal(p.timers.size, 0);
+});
+
+test('load event during launch is retained and existing conversations accept a new selection', async () => {
+ const p = page(); const connection = connectMessaging(p.win, p.doc); p.buttonReady();
+ const sent = [];
+ p.win.embeddedservice_bootstrap.utilAPI = {
+  launchChat: async () => p.win.dispatchEvent(new Event('onEmbeddedMessagingConversationOpened')),
+  sendTextMessage: async text => sent.push(text)
+ };
+ await connection.launch("Why isn't my Libre connecting?");
+ await connection.launch('What have the checks found so far?');
+ assert.equal(sent.length, 2);
+});
+
+test('timeout and conversation closure discard pending context with no late send', async () => {
+ for (const end of ['timeout', 'close']) {
+  const p = page(); const connection = connectMessaging(p.win, p.doc); p.buttonReady();
+  const sent = []; p.win.embeddedservice_bootstrap.utilAPI.sendTextMessage = async text => sent.push(text);
+  const pending = connection.launch('question');
+  const rejected = assert.rejects(pending, /context-not-sent/);
+  if (end === 'timeout') [...p.timers.values()][0]();
+  else p.win.dispatchEvent(new Event('onEmbeddedMessagingConversationClosed'));
+  await rejected;
+  p.win.dispatchEvent(new Event('onEmbeddedMessagingConversationOpened'));
+  assert.equal(sent.length, 0); assert.equal(p.timers.size, 0);
+ }
+});
+
+test('unsupported or failed sends surface errors without automatic retries', async () => {
+ const p = page(); const connection = connectMessaging(p.win, p.doc); p.buttonReady();
+ p.win.dispatchEvent(new Event('onEmbeddedMessagingConversationOpened'));
+ await assert.rejects(connection.launch('question'), /context-not-sent/);
+ let attempts = 0;
+ p.win.embeddedservice_bootstrap.utilAPI.sendTextMessage = async () => { attempts++; throw new Error('network'); };
+ await assert.rejects(connection.launch('question'), /context-unconfirmed/);
+ assert.equal(attempts, 1);
+});
+
+test('ordinary launch sends no invented user prompt and never controls audio', async () => {
+ const p = page(); const connection = connectMessaging(p.win, p.doc); p.buttonReady();
+ let sent = 0; p.win.embeddedservice_bootstrap.utilAPI.sendTextMessage = async () => sent++;
+ assert.deepEqual(await connection.launch(), {sent: false});
+ assert.equal(sent, 0); assert.equal(p.timers.size, 0);
+});
+
+test('agent-ended session requires fresh conversation readiness for the next card', async () => {
+ const p = page(); const connection = connectMessaging(p.win, p.doc); p.buttonReady();
+ const sent = []; p.win.embeddedservice_bootstrap.utilAPI.sendTextMessage = async text => sent.push(text);
+ p.win.dispatchEvent(new Event('onEmbeddedMessagingConversationOpened'));
+ const ended = new Event('onEmbeddedMessagingSessionStatusUpdate');
+ ended.detail = {conversationEntry: {entryPayload: JSON.stringify({entryType: 'SessionStatusChanged', sessionStatus: 'Ended'})}};
+ p.win.dispatchEvent(ended);
+ const pending = connection.launch('new question');
+ await Promise.resolve(); assert.equal(sent.length, 0);
+ p.win.dispatchEvent(new Event('onEmbeddedMessagingConversationOpened'));
+ await pending; assert.deepEqual(sent, ['new question']);
+});
+
+test('failed launch cleans up its pending message and never sends later', async () => {
+ const p = page(); const connection = connectMessaging(p.win, p.doc); p.buttonReady();
+ let sent = 0;
+ p.win.embeddedservice_bootstrap.utilAPI.launchChat = async () => { throw new Error('launch failed'); };
+ p.win.embeddedservice_bootstrap.utilAPI.sendTextMessage = async () => sent++;
+ await assert.rejects(connection.launch('question'), /launch failed/);
+ p.win.dispatchEvent(new Event('onEmbeddedMessagingConversationOpened'));
+ assert.equal(sent, 0); assert.equal(p.timers.size, 0);
+});

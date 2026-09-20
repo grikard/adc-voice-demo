@@ -17,15 +17,73 @@ export function connectMessaging(win = window, doc = document) {
  let status = 'loading';
  let initialized = false;
  let timer;
+ let conversationLoaded = false;
+ let pendingLaunch = null;
+ let cancelWait = null;
  const listeners = new Set();
  const connection = {
   getStatus: () => status,
+  launch(question) {
+   // Coalesce rapid clicks. Never queue a second message or retry a send.
+   if (pendingLaunch) return pendingLaunch;
+   pendingLaunch = openConversation(question).finally(() => { pendingLaunch = null; });
+   return pendingLaunch;
+  },
   subscribe(listener) {
    listeners.add(listener);
    return () => listeners.delete(listener);
   }
  };
  win[singletonKey] = connection;
+ win.addEventListener('onEmbeddedMessagingConversationOpened', () => { conversationLoaded = true; });
+ win.addEventListener('onEmbeddedMessagingFirstBotMessageSent', () => { conversationLoaded = true; });
+ win.addEventListener('onEmbeddedMessagingConversationClosed', () => {
+  conversationLoaded = false;
+  cancelWait?.();
+ });
+ win.addEventListener('onEmbeddedMessagingSessionStatusUpdate', event => {
+  try {
+   const raw = event.detail?.conversationEntry?.entryPayload;
+   const payload = typeof raw === 'string' ? JSON.parse(raw) : raw;
+   if (payload?.entryType === 'SessionStatusChanged' && payload.sessionStatus?.toUpperCase() === 'ENDED') {
+    conversationLoaded = false;
+    cancelWait?.();
+   }
+  } catch { /* Ignore malformed lifecycle payloads. */ }
+ });
+ async function openConversation(question) {
+  const api = win.embeddedservice_bootstrap?.utilAPI;
+  if (status !== 'ready' || typeof api?.launchChat !== 'function') throw new Error('launch-unavailable');
+  // Register before launch: the loaded event can precede the launch promise.
+  let stopWaiting;
+  const loaded = question && !conversationLoaded ? new Promise((resolve, reject) => {
+   let waitTimer;
+   const cleanup = () => {
+    win.clearTimeout(waitTimer);
+    win.removeEventListener('onEmbeddedMessagingConversationOpened', done);
+    win.removeEventListener('onEmbeddedMessagingFirstBotMessageSent', done);
+    cancelWait = null;
+   };
+   const done = () => { cleanup(); resolve(); };
+   stopWaiting = () => { cleanup(); reject(new Error('context-not-sent')); };
+   cancelWait = stopWaiting;
+   win.addEventListener('onEmbeddedMessagingConversationOpened', done);
+   win.addEventListener('onEmbeddedMessagingFirstBotMessageSent', done);
+   waitTimer = win.setTimeout(stopWaiting, 30000);
+  }) : Promise.resolve();
+  // Handle rejection even if launching itself is still pending.
+  loaded.catch(() => {});
+  try { await api.launchChat(true); } catch (error) { stopWaiting?.(); throw error; }
+  if (!question) return {sent: false};
+  await loaded;
+  if (!conversationLoaded || typeof api.sendTextMessage !== 'function') throw new Error('context-not-sent');
+  try {
+   // Supported API: the selected question becomes visible customer context.
+   // A card selection supplies no identity, diagnosis, consent or write instruction.
+   await api.sendTextMessage(question);
+   return {sent: true};
+  } catch { throw new Error('context-unconfirmed'); }
+ }
  function update(next) {
   status = next;
   for (const listener of listeners) listener();
