@@ -43,8 +43,38 @@ test('SSE Active supplies restored correlation but never authorizes records with
  const fire=status=>f.emit('onEmbeddedMessagingSessionStatusUpdate',{detail:{conversationId:cid,conversationEntry:{entryPayload:JSON.stringify({entryType:'SessionStatusChanged',sessionStatus:status})}}});
  fire('Active');assert.equal(b.snapshot().state,'binding');assert.equal(f.sent.at(-1).conversationId,cid);
  f.emit('message',{origin,source:f.win.opener,data:{nonce,type:'ADC_BOUND',persona:'HELEN',conversationId:cid}});
- assert.equal(b.snapshot().state,'bound');fire('Waiting');assert.equal(b.snapshot().state,'binding');
+ assert.equal(b.snapshot().state,'bound');fire('Waiting');assert.equal(b.snapshot().state,'paused');
+ fire('Active');assert.equal(b.snapshot().state,'binding');
  fire('Ended');assert.equal(b.snapshot().state,'ended');
+ b.dispose();
+});
+
+test('human routing waiting keeps native chat accessible without authorizing new checks',()=>{
+ const f=fixture(),b=connectPresenter(f.win,'INGRID');const send=d=>f.emit('message',{origin,source:f.win.opener,data:{nonce,...d}});
+ send({type:'ADC_BOUND',persona:'INGRID',conversationId:cid});
+ send({type:'ADC_SESSION_WAITING',conversationId:cid});assert.equal(b.snapshot().state,'paused');
+ const before=f.outputs.length;
+ send({type:'ADC_CHECKS',checks:{conversationId:cid,personaKey:'INGRID'}});assert.equal(f.outputs.length,before);
+ b.begin();assert.equal(b.snapshot().state,'paused');
+ f.emit('onEmbeddedMessagingConversationStarted',{detail:{conversationId:cid}});assert.equal(b.snapshot().state,'paused');
+ send({type:'ADC_BINDING_ERROR',conversationId:cid});assert.equal(b.snapshot().state,'error');
+ send({type:'ADC_SESSION_WAITING',conversationId:cid});assert.equal(b.snapshot().state,'error');
+ b.dispose();
+});
+
+test('refresh of waiting conversation needs an exact server-validated paused acknowledgement',()=>{
+ const f=fixture(),b=connectPresenter(f.win,'INGRID');const send=d=>f.emit('message',{origin,source:f.win.opener,data:{nonce,...d}});
+ f.emit('onEmbeddedMessagingSessionStatusUpdate',{detail:{conversationId:cid,conversationEntry:{entryPayload:{entryType:'SessionStatusChanged',sessionStatus:'Waiting'}}}});
+ assert.equal(b.snapshot().state,'binding');
+ send({type:'ADC_SESSION_WAITING',conversationId:cid});assert.equal(b.snapshot().state,'binding');
+ send({type:'ADC_SESSION_PAUSED',persona:'HELEN',conversationId:cid});assert.equal(b.snapshot().state,'binding');
+ send({type:'ADC_SESSION_PAUSED',persona:'INGRID',conversationId:'abcdef02-1234-1234-1234-123456789abc'});assert.equal(b.snapshot().state,'binding');
+ f.emit('message',{origin:'https://evil.test',source:f.win.opener,data:{nonce,type:'ADC_SESSION_PAUSED',persona:'INGRID',conversationId:cid}});assert.equal(b.snapshot().state,'binding');
+ send({type:'ADC_SESSION_PAUSED',persona:'INGRID',conversationId:cid});assert.equal(b.snapshot().state,'paused');
+ assert.equal(f.outputs.filter(e=>e.type==='onADCSessionBound').length,0);
+ send({type:'ADC_ENDED',conversationId:cid});send({type:'ADC_SESSION_PAUSED',persona:'INGRID',conversationId:cid});assert.equal(b.snapshot().state,'ended');
+ const next='abcdef03-1234-1234-1234-123456789abc';f.emit('onEmbeddedMessagingConversationStarted',{detail:{conversationId:next}});
+ send({type:'ADC_SESSION_PAUSED',persona:'INGRID',conversationId:cid});assert.equal(b.snapshot().state,'binding');
  b.dispose();
 });
 test('rollover acknowledgement persists only its authorized launch reference for page refresh',()=>{
