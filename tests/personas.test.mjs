@@ -9,7 +9,7 @@ test('root and every direct persona link resolve exactly; unknown/duplicate keys
  assert.equal(readRoute('').kind,'landing');
  for(const id of Object.keys(personas)){assert.equal(readRoute(personaHref(id)).id,id);assert.equal(readRoute(personaHref(id,true)).id,id);}
  for(const query of ['?persona=other','?persona=','?persona=HELEN','?persona=helen&persona=daniel','?persona=__proto__'])assert.equal(readRoute(query).kind,'unknown');
- assert.equal(personas.daniel.enabled,false);assert.equal(personas.ingrid.enabled,false);assert.equal(personas.ingrid.language,'de');
+ assert.equal(personas.daniel.enabled,true);assert.equal(personas.ingrid.enabled,true);assert.equal(personas.ingrid.language,'en');assert.equal(personas.ingrid.market,'DE');
 });
 test('switch awaits confirmed clearing before recording new experience; refresh preserves same experience',async()=>{
  const win=browser('helen');let release,calls=0;

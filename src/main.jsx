@@ -7,6 +7,7 @@ import {connectChecks} from './checks.js';
 import {YourChecks} from './YourChecks.jsx';
 import {personas,readRoute,personaHref,prepareExperience,personaStorageKey} from './personas.js';
 import {clearCustomerSession} from './sessionReset.js';
+import {connectPresenter} from './presenterBridge.js';
 import './styles.css';
 
 const route=readRoute(window.location.search);
@@ -14,10 +15,21 @@ const de=route.persona?.language==='de';
 document.documentElement.lang=de?'de':'en';
 document.title=route.persona?`${route.persona.name} · Libre Support`:'Libre Support · Choose an experience';
 const presenter=presenterMode(window.location.search);
+const bridge=connectPresenter(window,route.persona?.key);
 let checks={snapshot:()=>({card:null,ended:false}),subscribe:()=>()=>{},dispose:()=>{}};
 let measurements=null;
 const target=route.kind==='customer'?route.id:'landing';
-const preparation=prepareExperience(window,target,()=>clearCustomerSession()).catch(()=>({error:true}));
+const preparation=(async()=>{
+ const result=await prepareExperience(window,target,()=>clearCustomerSession());
+ if(result.reload)return result;
+ if(bridge.config&&!bridge.config.invalid){
+  const key='adc.presenter.launch';
+  if(window.sessionStorage.getItem(key)!==bridge.config.launch){
+   await clearCustomerSession();window.sessionStorage.setItem(key,bridge.config.launch);return {reload:true};
+  }
+ }
+ return result;
+})().catch(()=>({error:true}));
 
 function BrandHeader(){
  const [large,setLarge]=useState(false);
@@ -27,12 +39,14 @@ function BrandHeader(){
 function VoiceIcon(){return <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg>;}
 function Landing(){return <main id="main" className="launch-page">
  <section className="launch-intro"><p className="eyebrow"><span/>PRESENTER LAUNCHPAD</p><h1>One assistant.<br/><span>Three support experiences.</span></h1><p>Meet Alex, your Libre AI support assistant. Choose a prepared experience to begin the rehearsal.</p></section>
- <section className="persona-grid" aria-label="Choose a customer experience">{Object.entries(personas).map(([id,p],i)=><article className={`persona-card persona-${id}`} key={id}><div className="persona-card-top"><span className="persona-avatar" aria-hidden="true">{p.initials}</span><span className="persona-language">{p.language==='de'?'Deutsch · DE':'English · US'}</span></div><p className="persona-number">EXPERIENCE 0{i+1}</p><h2>{p.name}</h2><p className="persona-topic">{p.topic}</p><div className="persona-availability"><span aria-hidden="true"/>{p.availability}</div><a className="persona-link" href={personaHref(id,presenter)} lang={p.language}>{p.button}<span aria-hidden="true">↗</span></a></article>)}</section>
- <aside className="launch-note"><strong>Prepared for rehearsal.</strong><p>These links select a demo experience, not an authenticated customer identity. Current checks come from connected support records. Device observations and fulfillment remain simulated.</p><p>Helen needs presenter setup for each new conversation. Daniel’s session connection and Ingrid’s German deployment are still pending. Scenario controls stay in the Salesforce presenter console.</p><small>Changing experiences clears the previous Salesforce browser session across its tabs and windows. Use one experience at a time.</small></aside>
+ <p><a className="persona-link" href="https://hc1781018629519.my.salesforce.com/apex/ADCPresenterLaunch" target="_blank" rel="noopener">Open authenticated presenter launcher ↗</a></p><section className="persona-grid" aria-label="Choose a customer experience">{Object.entries(personas).map(([id,p],i)=><article className={`persona-card persona-${id}`} key={id}><div className="persona-card-top"><span className="persona-avatar" aria-hidden="true">{p.initials}</span><span className="persona-language">English · {p.market}</span></div><p className="persona-number">EXPERIENCE 0{i+1}</p><h2>{p.name}</h2><p className="persona-topic">{p.topic}</p><div className="persona-availability"><span aria-hidden="true"/>{p.availability}</div><a className="persona-link" href={personaHref(id,presenter)} lang={p.language}>{p.button}<span aria-hidden="true">↗</span></a></article>)}</section>
+ <aside className="launch-note"><strong>Prepared for rehearsal.</strong><p>These links select a demo experience, not an authenticated customer identity. Current checks come from connected support records. Device observations and fulfillment remain simulated.</p><p>Use the authenticated Salesforce presenter launcher for automatic session setup. All three experiences use English. Scenario controls stay in Salesforce.</p><small>Changing experiences clears the previous Salesforce browser session across its tabs and windows. Use one experience at a time.</small></aside>
  </main>;}
 function Customer({persona:p,phase}){
  const [context,setContext]=useState(checks.snapshot()),[ready,setReady]=useState(false),[opening,setOpening]=useState(false),[status,setStatus]=useState(''),[error,setError]=useState(false);
  const busy=useRef(false);
+ const [binding,setBinding]=useState(bridge.snapshot());
+ useEffect(()=>bridge.subscribe(()=>setBinding(bridge.snapshot())),[]);
  useEffect(()=>{if(phase!=='ready')setContext({card:null,ended:false});return checks.subscribe(()=>setContext(checks.snapshot()));},[phase]);
  useEffect(()=>{
   if(phase!=='ready'||!p.enabled)return;
@@ -40,9 +54,11 @@ function Customer({persona:p,phase}){
   const sync=()=>{const s=connection.getStatus();setReady(s==='ready');setError(s==='error');setStatus(s==='error'?'Support could not connect. Reload this page to retry.':s==='ready'?'Choose voice or typing in the conversation.':'Connecting to support…');};
   const off=connection.subscribe(sync);sync();return off;
  },[phase,p]);
- const enabled=phase==='ready'&&p.enabled&&ready&&!opening;
+ const prepared=bridge.config?['prepared','binding','bound'].includes(binding.state):p.key==='HELEN';
+ const enabled=phase==='ready'&&p.enabled&&ready&&!opening&&prepared;
  async function launch(mode,question){
   if(!enabled||busy.current)return;
+  if(question&&bridge.config&&binding.state!=='bound'){setStatus('Start the conversation and wait for support context to connect before asking about records.');return;}
   busy.current=true;setOpening(true);setError(false);measurements?.markLaunch();
   try{await connectMessaging().launch(question);setStatus(mode==='voice'?'Choose the voice control in the conversation. Your browser may ask for microphone access.':'Type your question in the conversation.');}
   catch{setError(true);setStatus('We could not confirm the conversation opened or the question was sent. Check the conversation before retrying.');}
@@ -52,9 +68,9 @@ function Customer({persona:p,phase}){
  <a className="back-link" href="./">← {de?'Zur Übersicht':'All experiences'}</a>
  <section className="welcome" aria-labelledby="welcomeTitle"><div className="welcome-copy"><p className="eyebrow"><span/>{de?'IHRE LIBRE UNTERSTÜTZUNG':'YOUR LIBRE SUPPORT'}</p><h1 id="welcomeTitle">{de?'Hallo':'Hello'} {p.first}.</h1><p className="intro">{p.headline}</p><p className="description">{p.description}</p><div className="profile-note"><span className="profile-icon" aria-hidden="true">{p.initials}</span><div><strong>{p.name}</strong><span>{de?'Vorbereitete Demo-Erfahrung · keine Identitätsprüfung':'Prepared demo experience · not identity verification'}</span></div></div>
  <div className="current-status"><span>{de?'AKTUELLER STATUS':'CURRENT STATUS'}</span><p>{context.card?.conclusion||(p.enabled?'Support context awaiting verification.':de?'Gespräch noch nicht verfügbar.':'Conversation not available yet.')}</p></div></div>
- <div className="conversation-card"><div className="voice-art" aria-hidden="true"><div className="voice-ring"><div className="voice-disc">{[1,2,3,4,5,6,7].map(n=><i key={n}/>)}</div></div></div><h2>{de?'Sprechen wir darüber.':'Let’s talk it through.'}</h2><p>{de?'In Ihrem Tempo. Eine Frage nach der anderen.':'At your pace. One question at a time.'}</p><button className="primary" id="startVoice" disabled={!enabled} onClick={()=>launch('voice')}><VoiceIcon/><span className="primary-label"><span>{opening?'Opening…':de?'Mit Alex sprechen':'Talk to Alex'}</span><small>{de?'Libre KI-Unterstützung':'Libre AI support'}</small></span></button><button className="secondary" id="startText" disabled={!enabled} onClick={()=>launch('text')}>{de?'Ich möchte lieber schreiben':'I prefer to type'} →</button><p className="availability-note">{p.blocker}</p>{p.enabled&&<p role="status" className={error?'status error':'status'}>{status}</p>}</div></section>
+ <div className="conversation-card"><div className="voice-art" aria-hidden="true"><div className="voice-ring"><div className="voice-disc">{[1,2,3,4,5,6,7].map(n=><i key={n}/>)}</div></div></div><h2>{de?'Sprechen wir darüber.':'Let’s talk it through.'}</h2><p>{de?'In Ihrem Tempo. Eine Frage nach der anderen.':'At your pace. One question at a time.'}</p><button className="primary" id="startVoice" disabled={!enabled} onClick={()=>launch('voice')}><VoiceIcon/><span className="primary-label"><span>{opening?'Opening…':de?'Mit Alex sprechen':'Talk to Alex'}</span><small>{de?'Libre KI-Unterstützung':'Libre AI support'}</small></span></button><button className="secondary" id="startText" disabled={!enabled} onClick={()=>launch('text')}>{de?'Ich möchte lieber schreiben':'I prefer to type'} →</button><p className="availability-note">{binding.state==='bound'?'Your support context is connected.':binding.state==='binding'?'Connecting this conversation to your support context? Please wait before asking about records.':binding.state==='error'?'Support context connection failed. Return to the presenter launcher.':p.blocker}</p>{p.enabled&&<p role="status" className={error?'status error':'status'}>{status}</p>}</div></section>
  <YourChecks controller={checks} language={p.language} disabled={!enabled} onReview={()=>launch('text','What do my current checks show, and what should I do next?')}/>
- {presenter&&<aside className="launch-note"><strong>Presenter preparation</strong><p>{p.key==='HELEN'?'After opening a new conversation, bind that exact session to Helen’s existing Case and the deliberately selected scenario. Current rehearsal: E002 / S02 historical enrichment; CRM controls current status and every write.':p.key==='DANIEL'?'Daniel’s independent Case and cloud-gap run exist. Per-session provisioning and a Daniel-only live retrieval test must pass before enabling these conversation buttons.':'The separate de_DE agent failed compiler validation (HTTP 422). A compatible German voice, dedicated published channel and generated snippet are still required.'}</p><p>Keep scenario selection in Salesforce. Never use this URL as proof of identity.</p></aside>}
+ {presenter&&<aside className="launch-note"><strong>Presenter preparation</strong><p>{p.key==='HELEN'?'After opening a new conversation, bind that exact session to Helen’s existing Case and the deliberately selected scenario. Current rehearsal: E002 / S02 historical enrichment; CRM controls current status and every write.':p.key==='DANIEL'?'Daniel’s independent Case and cloud-gap run exist. Per-session provisioning and a Daniel-only live retrieval test must pass before enabling these conversation buttons.':'Ingrid uses the shared English voice configuration with her DE service market. Launch from the authenticated presenter page.'}</p><p>Keep scenario selection in Salesforce. Never use this URL as proof of identity.</p></aside>}
  </main></>;
 }
 function App(){
