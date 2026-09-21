@@ -21,6 +21,8 @@ export function connectChecks(win,expectedPersona=null){
  let conversationId=null,card=null,ended=false;const retired=new Set(),listeners=new Set(),handlers=[];
  const publish=()=>{for(const f of listeners)f();};
  const on=(n,f)=>{win.addEventListener(n,f);handlers.push([n,f]);};
+ on('onADCSessionBound',e=>{const id=e.detail?.conversationId;if(typeof id!=='string'||retired.has(id)||(expectedPersona&&e.detail?.personaKey!==expectedPersona))return;if(id!==conversationId){if(conversationId)retired.add(conversationId);conversationId=id;card=null;ended=false;publish();}});
+ on('onADCChecksUnavailable',e=>{if(e.detail?.conversationId===conversationId){card=null;publish();}});
  on('onEmbeddedMessagingConversationStarted',e=>{
   const id=e.detail?.conversationId;if(typeof id!=='string'||retired.has(id)||id===conversationId)return;
   if(conversationId)retired.add(conversationId);conversationId=id;card=null;ended=false;publish();
