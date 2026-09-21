@@ -15,7 +15,15 @@ export function parseChecks(raw,conversationId){
   const success=row.success===true&&['VERIFIED','CUSTOMER_CONFIRMED'].includes(row.state)&&at!==null;
   rows.push({key:row.key,label:row.label,text:row.text,state:row.state,success,observedAt:at,sourceKind:row.sourceKind,beforeContact:row.beforeContact===true&&at!==null});
  }
- return {conversationId,personaKey:raw.personaKey,retrievedAt:Date.parse(raw.retrievedAt),conclusion:raw.conclusion,nextAction:raw.nextAction,checks:rows,backgroundContinues:raw.backgroundContinues===true};
+ const reports=[];
+ if(raw.customerReports!=null){
+  if(!Array.isArray(raw.customerReports)||raw.customerReports.length>6)return null;
+  for(const r of raw.customerReports){
+   if(!short(r.id,64)||!short(r.text,1000)||r.source!=='CUSTOMER_REPORTED'||r.currentTelemetry!==false||!Number.isFinite(Date.parse(r.recordedAt))||Date.parse(r.recordedAt)>Date.parse(raw.retrievedAt))return null;
+   reports.push({id:r.id,text:r.text,recordedAt:r.recordedAt});
+  }
+ }
+ return {conversationId,personaKey:raw.personaKey,retrievedAt:Date.parse(raw.retrievedAt),conclusion:raw.conclusion,nextAction:raw.nextAction,checks:rows,customerReports:reports,backgroundContinues:raw.backgroundContinues===true};
 }
 export function connectChecks(win,expectedPersona=null){
  let conversationId=null,card=null,ended=false;const retired=new Set(),listeners=new Set(),handlers=[];
