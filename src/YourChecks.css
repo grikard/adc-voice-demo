@@ -1,0 +1,28 @@
+.checks-card{box-sizing:border-box;margin:32px 0 0;padding:clamp(20px,3vw,36px);border:1px solid #d4dfeb;border-radius:24px;background:#fff;color:#19354f;font-size:1rem;line-height:1.5;overflow-wrap:anywhere}
+.checks-card .checks-heading{font-size:1.6em;line-height:1.2;letter-spacing:-.02em;margin:0 0 14px;font-weight:700}
+.checks-card .checks-conclusion{font-size:1.08em;color:#53677b;line-height:1.55;font-weight:400;margin:0 0 24px}
+.checks-card .checks-list{list-style:none;margin:0;padding:0;border-top:1px solid #d4dfeb}
+.checks-card .checks-row{--check-ink:#52606d;--check-bg:#f0f3f6;display:grid;grid-template-columns:42px minmax(0,1fr);column-gap:16px;padding:22px 0;border-bottom:1px solid #d4dfeb}
+.checks-card .checks-success{--check-ink:#176849;--check-bg:#eaf7ef}
+.checks-card .checks-negative{--check-ink:#b1262b;--check-bg:#fff0f1}
+.checks-card .checks-earlier,.checks-card .checks-attention{--check-ink:#805600;--check-bg:#fff5df}
+.checks-card .checks-confirmed,.checks-card .checks-checking{--check-ink:#245f96;--check-bg:#eaf3ff}
+.checks-card .checks-icon{display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;background:var(--check-bg);color:var(--check-ink)}
+.checks-card .checks-icon svg{display:block;width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.checks-card .checks-row-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;min-height:42px}
+.checks-card .checks-label{font-size:1em;line-height:1.4;font-weight:700;padding-top:6px}
+.checks-card .checks-badge{font-size:.85em;line-height:1.4;font-weight:700;color:var(--check-ink);background:var(--check-bg);border-radius:8px;padding:7px 11px;max-width:100%;box-sizing:border-box}
+.checks-card .checks-finding{margin:8px 0 0;color:#53677b;font-size:.95em;line-height:1.55}
+.checks-card .checks-details{margin-top:22px;color:#53677b}
+.checks-card .checks-details summary{color:#245f96;font-weight:650;cursor:pointer;padding:10px 0;min-height:44px;box-sizing:border-box}
+.checks-card .checks-details summary:focus-visible{outline:3px solid #245f96;outline-offset:4px;border-radius:4px}
+.checks-card .checks-details ul{list-style:none;padding:0;margin:10px 0}
+.checks-card .checks-details li{padding:10px 0;border-bottom:1px solid #e5ecf3;font-size:.85em}
+.checks-card .checks-details strong,.checks-card .checks-details span{display:block}
+.checks-card .checks-next{margin:22px 0 0;padding:16px 18px;background:#f3f7fb;border-radius:12px;font-size:.95em}
+.checks-card .checks-background,.checks-card .checks-empty{color:#53677b;font-size:.95em}
+.checks-card .checks-review{display:inline-block;background:none;border:0;color:#245f96;font:inherit;font-weight:650;min-height:48px;margin-top:12px;padding:12px 0;cursor:pointer}
+.checks-card .checks-review:disabled{opacity:.55;cursor:not-allowed}
+.checks-card .checks-review:focus-visible{outline:3px solid #245f96;outline-offset:4px}
+.large-text .checks-card{font-size:1.15rem}
+@media(max-width:480px){.checks-card{padding:20px;border-radius:18px}.checks-card .checks-row{column-gap:12px;grid-template-columns:36px minmax(0,1fr);padding:18px 0}.checks-card .checks-icon{width:36px;height:36px}.checks-card .checks-icon svg{width:25px;height:25px}.checks-card .checks-row-top{gap:8px}.checks-card .checks-label{flex-basis:100%;padding-top:3px}.checks-card .checks-badge{font-size:.8em}}
