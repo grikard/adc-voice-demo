@@ -46,7 +46,7 @@ function Customer({persona:p,phase}){
  const [context,setContext]=useState(checks.snapshot()),[ready,setReady]=useState(false),[opening,setOpening]=useState(false),[status,setStatus]=useState(''),[error,setError]=useState(false);
  const busy=useRef(false);
  const [binding,setBinding]=useState(bridge.snapshot());
- useEffect(()=>bridge.subscribe(()=>setBinding(bridge.snapshot())),[]);
+ useEffect(()=>{const sync=()=>setBinding(bridge.snapshot());const off=bridge.subscribe(sync);sync();return off;},[]);
  useEffect(()=>{if(phase!=='ready')setContext({card:null,ended:false});return checks.subscribe(()=>setContext(checks.snapshot()));},[phase]);
  useEffect(()=>{
   if(phase!=='ready'||!p.enabled)return;
