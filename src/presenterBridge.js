@@ -23,6 +23,7 @@ export function connectPresenter(win,persona){
   if(d.type==='ADC_BINDING_ERROR'&&(!d.conversationId||d.conversationId===conversationId))fail();
   if(d.type==='ADC_CHECKS_UNAVAILABLE')win.dispatchEvent(new win.CustomEvent('onADCChecksUnavailable',{detail:{conversationId}}));
   if(d.type==='ADC_ENDED'&&d.conversationId===conversationId)finish();
+  if(d.type==='ADC_SESSION_WAITING'&&d.conversationId===conversationId){state='binding';deadline=Date.now()+60000;notify();}
  }
  function started(e){
   if(!config||config.invalid)return;const id=e.detail?.conversationId;
@@ -34,13 +35,25 @@ export function connectPresenter(win,persona){
  function finish(){if(!conversationId)return;state='ended';send('ADC_SESSION_ENDED',{conversationId});notify();}
  function payload(e){try{const raw=e.detail?.conversationEntry?.entryPayload;return typeof raw==='string'?JSON.parse(raw):raw;}catch{return null;}}
  function ended(e){const p=payload(e),id=e.detail?.conversationId||p?.conversationIdentifier;if(id===conversationId)finish();}
- function sessionStatus(e){const p=payload(e);if(p?.entryType==='SessionStatusChanged'&&p.conversationIdentifier===conversationId&&String(p.sessionStatus).toUpperCase()==='ENDED')finish();}
+ function opened(){if(config&&!config.invalid)send('ADC_RESUME');}
+ function sessionStatus(e){
+  const p=payload(e);if(p?.entryType!=='SessionStatusChanged')return;
+  const id=e.detail?.conversationId||p.conversationIdentifier,status=String(p.sessionStatus).toUpperCase();
+  if(status==='ENDED'&&id===conversationId){finish();return;}
+  // Active/Waiting can arrive for a restored conversation without Started in
+  // this tab. SSE IDs are only correlation; the server revalidates every bind.
+  if(['ACTIVE','WAITING'].includes(status)&&typeof id==='string'&&!retired.has(id)){
+   if(id===conversationId&&state==='bound'){state='binding';deadline=Date.now()+60000;send('ADC_CONVERSATION',{conversationId});notify();}
+   else started({detail:{conversationId:id}});
+  }
+ }
  win.addEventListener('message',onMessage);win.addEventListener('onEmbeddedMessagingConversationStarted',started);
+ win.addEventListener('onEmbeddedMessagingConversationOpened',opened);
  win.addEventListener('onEmbeddedMessagingConversationClosed',ended);win.addEventListener('onEmbeddedMessagingSessionStatusUpdate',sessionStatus);
  if(config){if(config.invalid||!win.opener)state='error';else{send('ADC_HELLO');timer=win.setInterval(()=>{
   if(['waiting','connecting','binding'].includes(state)&&(Date.now()>deadline||win.opener.closed)){fail();return;}
   if(state==='waiting')send('ADC_HELLO');
   if(state==='binding')send('ADC_CONVERSATION',{conversationId});
  },1500);}}
- return {config,snapshot:()=>({state,conversationId}),begin:()=>{if(!['prepared','ended','bound'].includes(state))throw Error('Presenter authorization required');if(state!=='bound'){state='connecting';deadline=Date.now()+60000;notify();}},fail,subscribe:f=>{listeners.add(f);return()=>listeners.delete(f);},dispose:()=>{win.clearInterval(timer);win.removeEventListener('message',onMessage);win.removeEventListener('onEmbeddedMessagingConversationStarted',started);win.removeEventListener('onEmbeddedMessagingConversationClosed',ended);win.removeEventListener('onEmbeddedMessagingSessionStatusUpdate',sessionStatus);}};
+ return {config,snapshot:()=>({state,conversationId}),begin:()=>{if(!['prepared','ended','bound'].includes(state))throw Error('Presenter authorization required');if(state!=='bound'){state='connecting';deadline=Date.now()+60000;notify();}},fail,subscribe:f=>{listeners.add(f);return()=>listeners.delete(f);},dispose:()=>{win.clearInterval(timer);win.removeEventListener('message',onMessage);win.removeEventListener('onEmbeddedMessagingConversationStarted',started);win.removeEventListener('onEmbeddedMessagingConversationOpened',opened);win.removeEventListener('onEmbeddedMessagingConversationClosed',ended);win.removeEventListener('onEmbeddedMessagingSessionStatusUpdate',sessionStatus);}};
 }

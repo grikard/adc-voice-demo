@@ -32,3 +32,18 @@ test('page restoration requires the exact authenticated opener acknowledgement',
 test('ordinary URL never enables a conversation as Helen',()=>{
  const f=fixture();f.win.location.hash='';const b=connectPresenter(f.win,'HELEN');assert.equal(b.snapshot().state,'manual');assert.throws(()=>b.begin());
 });
+test('restored chat Opened carries no ID and only requests authenticated server revalidation',()=>{
+ const f=fixture(),b=connectPresenter(f.win,'HELEN');
+ f.emit('onEmbeddedMessagingConversationOpened',{detail:{}});
+ assert.equal(f.sent.at(-1).type,'ADC_RESUME');assert.equal(b.snapshot().conversationId,null);assert.notEqual(b.snapshot().state,'bound');
+ b.dispose();
+});
+test('SSE Active supplies restored correlation but never authorizes records without server acknowledgement',()=>{
+ const f=fixture(),b=connectPresenter(f.win,'HELEN');
+ const fire=status=>f.emit('onEmbeddedMessagingSessionStatusUpdate',{detail:{conversationId:cid,conversationEntry:{entryPayload:JSON.stringify({entryType:'SessionStatusChanged',sessionStatus:status})}}});
+ fire('Active');assert.equal(b.snapshot().state,'binding');assert.equal(f.sent.at(-1).conversationId,cid);
+ f.emit('message',{origin,source:f.win.opener,data:{nonce,type:'ADC_BOUND',persona:'HELEN',conversationId:cid}});
+ assert.equal(b.snapshot().state,'bound');fire('Waiting');assert.equal(b.snapshot().state,'binding');
+ fire('Ended');assert.equal(b.snapshot().state,'ended');
+ b.dispose();
+});
