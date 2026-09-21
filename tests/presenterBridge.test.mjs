@@ -47,3 +47,11 @@ test('SSE Active supplies restored correlation but never authorizes records with
  fire('Ended');assert.equal(b.snapshot().state,'ended');
  b.dispose();
 });
+test('rollover acknowledgement persists only its authorized launch reference for page refresh',()=>{
+ const f=fixture(),stored=new Map();let replaced;
+ f.win.history={replaceState:(_a,_b,url)=>{replaced=url;}};f.win.sessionStorage={setItem:(k,v)=>stored.set(k,v)};
+ const b=connectPresenter(f.win,'HELEN'),next='a00000000000002AAA';
+ f.emit('message',{origin,source:f.win.opener,data:{nonce,type:'ADC_BOUND',persona:'HELEN',conversationId:cid,launchId:next}});
+ assert.equal(b.snapshot().state,'bound');assert.equal(new URLSearchParams(replaced.slice(1)).get('launch'),next);
+ assert.equal(stored.get('adc.presenter.launch'),next);assert.equal(b.config.launch,next);
+});
