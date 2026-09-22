@@ -16,6 +16,7 @@ export function connectMessaging(win = window, doc = document) {
  if (win[singletonKey]) return win[singletonKey];
  let status = 'loading';
  let initialized = false;
+ let apiReady = false;
  let timer;
  let conversationLoaded = false;
  let pendingLaunch = null;
@@ -23,6 +24,7 @@ export function connectMessaging(win = window, doc = document) {
  const listeners = new Set();
  const connection = {
   getStatus: () => status,
+  isApiReady: () => apiReady,
   launch(question) {
    // Coalesce rapid clicks. Never queue a second message or retry a send.
    if (pendingLaunch) return pendingLaunch;
@@ -35,6 +37,11 @@ export function connectMessaging(win = window, doc = document) {
   }
  };
  win[singletonKey] = connection;
+ // Reset uses API readiness, independently of creation of the visible launcher.
+ win.addEventListener('onEmbeddedMessagingReady', () => {
+  apiReady = true;
+  for (const listener of listeners) listener();
+ });
  win.addEventListener('onEmbeddedMessagingConversationOpened', () => { conversationLoaded = true; });
  win.addEventListener('onEmbeddedMessagingFirstBotMessageSent', () => { conversationLoaded = true; });
  win.addEventListener('onEmbeddedMessagingConversationClosed', () => {

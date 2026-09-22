@@ -9,7 +9,7 @@ import {YourNextStep} from './YourNextStep.jsx';
 import {nextStepEnabled} from './nextStep.js';
 const showNextStep = nextStepEnabled(window.location.search, import.meta.env.VITE_CONTROLLED_GUIDANCE !== 'false');
 import {personas,readRoute,personaHref,prepareExperience,personaStorageKey} from './personas.js';
-import {clearCustomerSession} from './sessionReset.js';
+import {clearCustomerSession,preparationProblem} from './sessionReset.js';
 import {connectPresenter} from './presenterBridge.js';
 import './styles.css';
 
@@ -32,7 +32,7 @@ const preparation=(async()=>{
   }
  }
  return result;
-})().catch(()=>({error:true}));
+})().catch(error=>({error:preparationProblem(error)}));
 
 function BrandHeader(){
  const [large,setLarge]=useState(false);
@@ -80,16 +80,18 @@ function Customer({persona:p,phase}){
 }
 function App(){
  const [phase,setPhase]=useState('preparing');
+ const [preparationError,setPreparationError]=useState(null);
  useEffect(()=>{
   let live=true;
-  preparation.then(({reload,error})=>{if(!live)return;if(error){setPhase('error');return;}if(reload){window.location.reload();return;}if(route.persona){checks=connectChecks(window,route.persona.key);measurements=presenter?connectMeasurements(route.persona.key):null;}setPhase('ready');});
+  preparation.then(({reload,error})=>{if(!live)return;if(error){setPreparationError(error);setPhase('error');return;}if(reload){window.location.reload();return;}if(route.persona){checks=connectChecks(window,route.persona.key);measurements=presenter?connectMeasurements(route.persona.key):null;}setPhase('ready');});
   const changed=e=>{if(e.key===personaStorageKey&&e.newValue!==target){setPhase('changed');measurements?.setPersona('UNBOUND');checks.dispose();window.embeddedservice_bootstrap?.utilAPI?.removeAllComponents?.();}};
   const restored=e=>{if(e.persisted)window.location.reload();};
   window.addEventListener('storage',changed);window.addEventListener('pageshow',restored);
   return()=>{live=false;window.removeEventListener('storage',changed);window.removeEventListener('pageshow',restored);};
  },[]);
  return <><a className="skip" href="#main">{de?'Zum Inhalt':'Skip to support'}</a><BrandHeader/>
- {phase!=='ready'&&<div className="session-notice" role="status">{phase==='preparing'?(de?'Die Gesprächsumgebung wird vorbereitet…':'Preparing a separate conversation environment…'):phase==='changed'?(de?'Eine andere Erfahrung wurde geöffnet. Bitte laden Sie diese Seite neu.':'Another experience was opened. Reload this page before continuing.'):(de?'Die vorherige Sitzung konnte nicht sicher zurückgesetzt werden. Bitte schließen Sie den Chat und laden Sie diese Seite neu.':'We could not safely clear the previous session. End the chat using its menu, then reload this page. Conversation launch is blocked until reset succeeds.')}</div>}
+ {phase!=='ready'&&<div className="session-notice" role="status">{phase==='preparing'?(de?'Die Gesprächsumgebung wird vorbereitet…':'Preparing a separate conversation environment…'):phase==='changed'?(de?'Eine andere Erfahrung wurde geöffnet. Bitte laden Sie diese Seite neu.':'Another experience was opened. Reload this page before continuing.'):(de?'Die vorherige Sitzung konnte nicht sicher zurückgesetzt werden. Bitte schließen Sie den Chat und laden Sie diese Seite neu.':(preparationError?.text||'Conversation preparation failed.'))}</div>}
+ {phase==='error'&&<div className="session-notice"><p>Diagnostic: <strong>{preparationError?.code||'PREPARATION_FAILED'}</strong>. A new conversation stays blocked until preparation succeeds.</p><button type="button" className="checks-review" onClick={()=>window.location.reload()}>Reload and retry</button></div>}
  {route.kind==='customer'?<Customer persona={route.persona} phase={phase}/>:route.kind==='unknown'?<main id="main"><h1>Experience not found.</h1><a href="./">Choose Helen, Daniel or Ingrid</a></main>:<Landing/>}
  <footer><span>Abbott · FreeStyle Libre</span><span>Alex · {de?'Libre KI-Assistent':'Libre AI support assistant'}</span></footer></>;
 }

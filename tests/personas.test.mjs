@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readRoute,personaHref,personas,prepareExperience,personaStorageKey} from '../src/personas.js';
 import {connectChecks} from '../src/checks.js';
 import {connectMessaging} from '../src/messaging.js';
-import {clearCustomerSession} from '../src/sessionReset.js';
+import {clearCustomerSession,preparationProblem} from '../src/sessionReset.js';
 function browser(value){const data=new Map(value?[[personaStorageKey,value]]:[]);return {localStorage:{getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v)},navigator:{locks:{request:async(_,fn)=>fn()}}};}
 test('root and every direct persona link resolve exactly; unknown/duplicate keys have no Helen fallback',()=>{
  assert.equal(readRoute('').kind,'landing');
@@ -36,11 +36,35 @@ test('Daniel page rejects Helen checks even with matching conversation ID',()=>{
  win.dispatchEvent(new CustomEvent('onADCYourChecks',{detail:payload}));assert.equal(c.snapshot().card,null);
  win.dispatchEvent(new CustomEvent('onADCYourChecks',{detail:{...payload,personaKey:'DANIEL',conclusion:'Daniel fact'}}));assert.equal(c.snapshot().card.personaKey,'DANIEL');c.dispose();
 });
-function resetPage(clear){
+function resetPage(clear,button=true){
  const win=new EventTarget();win.setTimeout=setTimeout;win.clearTimeout=clearTimeout;
  const calls=[];win.embeddedservice_bootstrap={settings:{},init(){},userVerificationAPI:{clearSession:clear},utilAPI:{launchChat(){},removeAllComponents(){calls.push('removed');}}};
- const doc={createElement:()=>({}),head:{appendChild(){}}};connectMessaging(win,doc);win.dispatchEvent(new Event('onEmbeddedMessagingButtonCreated'));return {win,doc,calls};
+ const doc={createElement:()=>({}),head:{appendChild(){}}};connectMessaging(win,doc);win.dispatchEvent(new Event('onEmbeddedMessagingReady'));if(button)win.dispatchEvent(new Event('onEmbeddedMessagingButtonCreated'));return {win,doc,calls};
 }
+
+test('reset completes with API readiness even if no chat button has been created',async()=>{
+ let clears=0;const p=resetPage(async()=>{clears++;},false);
+ assert.equal(connectMessaging(p.win,p.doc).getStatus(),'loading');
+ await clearCustomerSession(p.win,p.doc);assert.equal(clears,1);assert.deepEqual(p.calls,['removed']);
+ // Clear the separate launch-readiness timer after proving reset independence.
+ p.win.dispatchEvent(new Event('onEmbeddedMessagingButtonCreated'));
+});
+
+test('button readiness alone cannot authorize calling the reset API',async()=>{
+ const win=new EventTarget();win.setTimeout=setTimeout;win.clearTimeout=clearTimeout;let clears=0;
+ win.embeddedservice_bootstrap={settings:{},init(){},userVerificationAPI:{clearSession:async()=>{clears++;}},utilAPI:{launchChat(){},removeAllComponents(){}}};
+ const doc={createElement:()=>({}),head:{appendChild(){}}};connectMessaging(win,doc);win.dispatchEvent(new Event('onEmbeddedMessagingButtonCreated'));
+ const work=clearCustomerSession(win,doc);await Promise.resolve();assert.equal(clears,0);
+ win.dispatchEvent(new Event('onEmbeddedMessagingReady'));await work;assert.equal(clears,1);
+});
+
+test('preparation diagnostics distinguish loading, storage and reset failures without exposing raw SDK text',()=>{
+ assert.equal(preparationProblem(Error('Salesforce unavailable')).code,'MESSAGING_NOT_READY');
+ assert.equal(preparationProblem(Error('Reset readiness timed out')).code,'MESSAGING_NOT_READY');
+ assert.equal(preparationProblem(Error('Session reset timed out')).code,'RESET_TIMEOUT');
+ assert.equal(preparationProblem({name:'SecurityError'}).code,'BROWSER_STORAGE');
+ const result=preparationProblem(Error('private token and URL'));assert.equal(result.code,'PREPARATION_FAILED');assert(!JSON.stringify(result).includes('private token'));
+});
 test('uses supported clearSession then removes components only after resolved reset',async()=>{
  let release;const p=resetPage(()=>new Promise(r=>release=r));const work=clearCustomerSession(p.win,p.doc);await Promise.resolve();assert.deepEqual(p.calls,[]);release();await work;assert.deepEqual(p.calls,['removed']);
 });
