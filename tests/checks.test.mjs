@@ -21,3 +21,15 @@ test('new conversations clear old results and ended summaries ignore late update
  fire('onEmbeddedMessagingConversationStarted',{conversationId:'conv-2'});assert.equal(c.snapshot().card,null);assert.equal(c.snapshot().ended,false);
  fire('onADCYourChecks',card());assert.equal(c.snapshot().card,null);c.dispose();
 });
+
+test('same-conversation server rebind clears ended checks and permits a fresh projection',()=>{
+ const win=new EventTarget(),c=connectChecks(win,'HELEN');const fire=(type,detail)=>win.dispatchEvent(new CustomEvent(type,{detail}));
+ fire('onADCSessionBound',{conversationId:'conv-1',personaKey:'HELEN'});fire('onADCYourChecks',card());
+ fire('onEmbeddedMessagingConversationClosed',{conversationId:'conv-1'});const old=c.snapshot().card;
+ fire('onEmbeddedMessagingConversationOpened',{});fire('onADCYourChecks',card({conclusion:'unconfirmed new result'}));
+ assert.equal(c.snapshot().card,old);assert.equal(c.snapshot().ended,true);
+ fire('onADCSessionBound',{conversationId:'conv-1',personaKey:'DANIEL'});assert.equal(c.snapshot().ended,true);
+ fire('onADCSessionBound',{conversationId:'conv-1',personaKey:'HELEN'});
+ assert.deepEqual(c.snapshot(),{card:null,ended:false});
+ fire('onADCYourChecks',card({conclusion:'New authorized projection'}));assert.equal(c.snapshot().card.conclusion,'New authorized projection');c.dispose();
+});

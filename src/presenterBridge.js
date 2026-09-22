@@ -69,10 +69,10 @@ export function connectPresenter(win,persona){
  win.addEventListener('onEmbeddedMessagingConversationOpened',opened);
  win.addEventListener('onEmbeddedMessagingConversationClosed',ended);win.addEventListener('onEmbeddedMessagingSessionStatusUpdate',sessionStatus);
  if(config){if(config.invalid||!win.opener)state='error';else{send('ADC_HELLO');timer=win.setInterval(()=>{
-  if(['waiting','connecting','binding'].includes(state)&&(Date.now()>deadline||win.opener.closed)){fail();return;}
+  if(['waiting','binding'].includes(state)&&(Date.now()>deadline||win.opener.closed)){fail();return;}
   if(state==='waiting')send('ADC_HELLO');
   if(['prepared','bound','paused','ended'].includes(state)&&++heartbeat%8===0)send('ADC_HELLO');
   if(state==='binding')send('ADC_CONVERSATION',{conversationId});
  },1500);}}
- return {config,snapshot:()=>({state,conversationId}),begin:()=>{if(!['prepared','ended','bound','paused'].includes(state))throw Error('Presenter authorization required');if(!['bound','paused'].includes(state)){state='connecting';deadline=Date.now()+60000;notify();}},fail,subscribe:f=>{listeners.add(f);return()=>listeners.delete(f);},dispose:()=>{win.clearInterval(timer);win.removeEventListener('message',onMessage);win.removeEventListener('onEmbeddedMessagingConversationStarted',started);win.removeEventListener('onEmbeddedMessagingConversationOpened',opened);win.removeEventListener('onEmbeddedMessagingConversationClosed',ended);win.removeEventListener('onEmbeddedMessagingSessionStatusUpdate',sessionStatus);}};
+ return {config,snapshot:()=>({state,conversationId}),begin:()=>{if(!['prepared','ended','bound','paused'].includes(state))throw Error('Presenter authorization required');/* Opening the widget is not a new session. Keep native controls available until Started/SSE requires binding. */},fail,subscribe:f=>{listeners.add(f);return()=>listeners.delete(f);},dispose:()=>{win.clearInterval(timer);win.removeEventListener('message',onMessage);win.removeEventListener('onEmbeddedMessagingConversationStarted',started);win.removeEventListener('onEmbeddedMessagingConversationOpened',opened);win.removeEventListener('onEmbeddedMessagingConversationClosed',ended);win.removeEventListener('onEmbeddedMessagingSessionStatusUpdate',sessionStatus);}};
 }

@@ -14,10 +14,10 @@ test('requires exact opener origin nonce persona and conversation for checks',()
 
 test('a second conversation requires a new server acknowledgement and rejects retired messages',()=>{
  const f=fixture(),b=connectPresenter(f.win,'HELEN');const send=d=>f.emit('message',{origin,source:f.win.opener,data:{nonce,...d}});
- send({type:'ADC_LAUNCH_READY',persona:'HELEN'});b.begin();assert.equal(b.snapshot().state,'connecting');
+ send({type:'ADC_LAUNCH_READY',persona:'HELEN'});b.begin();assert.equal(b.snapshot().state,'prepared');
  f.emit('onEmbeddedMessagingConversationStarted',{detail:{conversationId:cid}});send({type:'ADC_BOUND',persona:'HELEN',conversationId:cid});
  f.emit('onEmbeddedMessagingSessionStatusUpdate',{detail:{conversationEntry:{entryPayload:JSON.stringify({entryType:'SessionStatusChanged',conversationIdentifier:cid,sessionStatus:'Ended'})}}});
- assert.equal(b.snapshot().state,'ended');b.begin();assert.equal(b.snapshot().state,'connecting');
+ assert.equal(b.snapshot().state,'ended');b.begin();assert.equal(b.snapshot().state,'ended');
  const next='abcdef03-1234-1234-1234-123456789abc';f.emit('onEmbeddedMessagingConversationStarted',{detail:{conversationId:next}});
  send({type:'ADC_BOUND',persona:'HELEN',conversationId:cid});assert.equal(b.snapshot().state,'binding');
  send({type:'ADC_BOUND',persona:'HELEN',conversationId:next});assert.equal(b.snapshot().state,'bound');assert.equal(b.snapshot().conversationId,next);
@@ -31,6 +31,21 @@ test('page restoration requires the exact authenticated opener acknowledgement',
 });
 test('ordinary URL never enables a conversation as Helen',()=>{
  const f=fixture();f.win.location.hash='';const b=connectPresenter(f.win,'HELEN');assert.equal(b.snapshot().state,'manual');assert.throws(()=>b.begin());
+});
+
+test('opening ended human chat does not invent binding; same-conversation Active still requires server approval',()=>{
+ const f=fixture(),b=connectPresenter(f.win,'HELEN');const send=d=>f.emit('message',{origin,source:f.win.opener,data:{nonce,...d}});
+ send({type:'ADC_BOUND',persona:'HELEN',conversationId:cid});send({type:'ADC_ENDED',conversationId:cid});
+ const boundEvents=f.outputs.filter(e=>e.type==='onADCSessionBound').length;
+ b.begin();f.emit('onEmbeddedMessagingConversationOpened',{detail:{}});
+ assert.equal(b.snapshot().state,'ended');assert.equal(f.sent.at(-1).type,'ADC_RESUME');
+ assert.equal(f.outputs.filter(e=>e.type==='onADCSessionBound').length,boundEvents);
+ f.emit('onEmbeddedMessagingSessionStatusUpdate',{detail:{conversationId:cid,conversationEntry:{entryPayload:{entryType:'SessionStatusChanged',sessionStatus:'Active'}}}});
+ assert.equal(b.snapshot().state,'binding');
+ send({type:'ADC_CHECKS',checks:{conversationId:cid,personaKey:'HELEN'}});
+ assert.equal(f.outputs.filter(e=>e.type==='onADCYourChecks').length,0);
+ send({type:'ADC_BOUND',persona:'HELEN',conversationId:cid});assert.equal(b.snapshot().state,'bound');
+ b.dispose();
 });
 test('restored chat Opened carries no ID and only requests authenticated server revalidation',()=>{
  const f=fixture(),b=connectPresenter(f.win,'HELEN');
