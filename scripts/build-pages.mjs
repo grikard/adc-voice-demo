@@ -26,7 +26,7 @@ function inspect(dir, prefix = '') {
       if (name !== 'assets') throw new Error(`Unexpected deployment directory: ${name}`);
       inspect(resolve(dir, item.name), name + '/');
     } else {
-      if (!/^(index\.html|\.nojekyll|assets\/[A-Za-z0-9_.-]+\.(js|css|png))$/.test(name)) {
+      if (!/^(index\.html|behind\.html|\.nojekyll|assets\/[A-Za-z0-9_.-]+\.(js|css|png))$/.test(name)) {
         throw new Error(`Unexpected deployment file: ${name}`);
       }
       if (/\.(html|js|css)$/.test(name)) {
